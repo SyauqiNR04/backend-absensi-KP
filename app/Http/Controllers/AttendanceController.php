@@ -17,6 +17,7 @@ class AttendanceController extends Controller
             'nip' => 'required|exists:employees,nip',
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
+            'image' => 'nullable|string', 
         ]);
 
         // 2. Ambil data karyawan berdasarkan NIP dan data koordinat kantor pusat
@@ -42,16 +43,12 @@ class AttendanceController extends Controller
 
         // 4. Validasi Radius GPS
         if ($jarak_meter > $setting->radius_meter) {
-            // Hitung seberapa jauh dia meleset dari batas radius
             $selisih_jarak = $jarak_meter - $setting->radius_meter;
 
-            // Jika selisihnya 1000 meter atau lebih, ubah ke KM
             if ($selisih_jarak >= 1000) {
-                // Konversi ke KM dengan 1 angka di belakang koma (contoh: 4,3 KM)
                 $angka_km = number_format($selisih_jarak / 1000, 1, ',', '.');
                 $teks_jarak = $angka_km . ' KM';
             } else {
-                // Jika masih di bawah 1000 meter, tetap gunakan Meter
                 $teks_jarak = round($selisih_jarak) . ' Meter';
             }
 
@@ -61,13 +58,25 @@ class AttendanceController extends Controller
             ], 403);
         }
 
+        // ---> PERBAIKAN ERROR 1: Deklarasi awal variabel $imagePath <---
+        $imagePath = null;
+        
+        if ($request->has('image') && $request->image != "") {
+            $image_base64 = base64_decode($request->image);
+            $fileName = 'foto_' . $request->nip . '_' . time() . '.jpg';
+            $path = 'attendances/' . $fileName;
+            Storage::disk('public')->put($path, $image_base64);
+            $imagePath = $path; // Variabel diisi jika foto berhasil diproses
+        }
+
         // 5. Simpan Data Absensi jika posisi berada di dalam radius
         $attendance = Attendance::create([
             'employee_id' => $employee->id,
             'waktu_absen' => now(),
             'latitude' => $request->latitude,
             'longitude' => $request->longitude,
-            'status' => 'hadir'
+            'status' => 'hadir',
+            'foto_bukti' => $imagePath // Data disimpan ke kolom 'foto_bukti'
         ]);
 
         return response()->json([
@@ -77,7 +86,8 @@ class AttendanceController extends Controller
         ], 201);
     }
     
-    public function history($nip)
+    // ---> PERBAIKAN ERROR 2: Menambahkan tipe data 'string' <---
+    public function history(string $nip)
     {
         // 1. Cari data karyawan berdasarkan NIP
         $employee = Employee::where('nip', $nip)->first();
