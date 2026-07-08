@@ -6,6 +6,7 @@ use App\Models\Attendance;
 use App\Models\Setting;
 use App\Models\Employee;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class AttendanceController extends Controller
 {
