@@ -3,17 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User as Authenticatable; // Mengubahnya menjadi tipe Authenticatable
+use Laravel\Sanctum\HasApiTokens; // Syarat mutlak untuk API
 
-class Employee extends Model
+class Employee extends Authenticatable
 {
-    use HasFactory;
+    use HasApiTokens, HasFactory;
 
-    // Mengizinkan semua kolom diisi melalui API
-    protected $guarded = []; 
+    protected $table = 'employees';
 
-    // Memberitahu Laravel bahwa kolom face_embedding ini formatnya Array/JSON
-    protected $casts = [
-        'face_embedding' => 'array',
-    ];
+    // Mengizinkan semua kolom diisi secara massal (mass assignment)
+    protected $guarded = ['id'];
 }
