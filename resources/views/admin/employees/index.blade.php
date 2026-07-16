@@ -29,6 +29,7 @@
             <div style="width: 250px; padding: 28px 24px; color: #0B1C30; font-size: 12px; font-weight: 600; text-transform: uppercase;">NAMA LENGKAP & NIP</div>
             <div style="width: 200px; padding: 28px 24px; color: #0B1C30; font-size: 12px; font-weight: 600; text-transform: uppercase;">JABATAN</div>
             <div style="width: 180px; padding: 28px 24px; color: #0B1C30; font-size: 12px; font-weight: 600; text-transform: uppercase;">STATUS WAJAH (AI)</div>
+            <div style="width: 150px; padding: 28px 24px; color: #0B1C30; font-size: 12px; font-weight: 600; text-transform: uppercase;">STATUS AKUN</div>
             <div style="flex: 1; padding: 28px 24px; color: #0B1C30; font-size: 12px; font-weight: 600; text-transform: uppercase; text-align: right;">AKSI</div>
         </div>
 
@@ -62,14 +63,47 @@
                         @endif
                     </div>
                     
+                    <div style="width: 150px; padding: 20px 24px;">
+                        @if(empty($emp->password))
+                            {{-- Tanpa password, karyawan tidak bisa login walau statusnya aktif.
+                                 Terjadi pada data yang dibuat sebelum login berpassword ada. --}}
+                            <a href="/admin/employees/{{ $emp->id }}/edit" style="display: inline-flex; padding: 6px 12px; background: rgba(255, 218, 214, 0.40); border-radius: 9999px; border: 1px solid #FFDAD6; align-items: center; gap: 6px; text-decoration: none;">
+                                <div style="width: 8px; height: 8px; background: #BA1A1A; border-radius: 50%;"></div>
+                                <div style="color: #BA1A1A; font-size: 12px; font-weight: 700;">Perlu Password</div>
+                            </a>
+                        @elseif($emp->status === 'active')
+                            <div style="display: inline-flex; padding: 6px 12px; background: rgba(188, 238, 207, 0.30); border-radius: 9999px; border: 1px solid #BCEECF; align-items: center; gap: 6px;">
+                                <div style="width: 8px; height: 8px; background: #14422D; border-radius: 50%;"></div>
+                                <div style="color: #14422D; font-size: 12px; font-weight: 700;">Aktif</div>
+                            </div>
+                        @elseif($emp->status === 'pending')
+                            <div style="display: inline-flex; padding: 6px 12px; background: rgba(254, 243, 199, 0.60); border-radius: 9999px; border: 1px solid #FDE68A; align-items: center; gap: 6px;">
+                                <div style="width: 8px; height: 8px; background: #92400E; border-radius: 50%;"></div>
+                                <div style="color: #92400E; font-size: 12px; font-weight: 700;">Menunggu</div>
+                            </div>
+                        @else
+                            <div style="display: inline-flex; padding: 6px 12px; background: rgba(107, 114, 128, 0.12); border-radius: 9999px; border: 1px solid #D1D5DB; align-items: center; gap: 6px;">
+                                <div style="width: 8px; height: 8px; background: #6B7280; border-radius: 50%;"></div>
+                                <div style="color: #6B7280; font-size: 12px; font-weight: 700;">Nonaktif</div>
+                            </div>
+                        @endif
+                    </div>
+
                     <div style="flex: 1; padding: 20px 24px; display: flex; justify-content: flex-end; gap: 12px;">
                         <a href="/admin/employees/{{ $emp->id }}/edit" class="btn-hover" style="padding: 8px 16px; background: #EFF4FF; border-radius: 8px; color: #2563EB; font-size: 14px; font-weight: 700; border: 1px solid #D3E4FE;">Edit</a>
-                        
-                        <form action="/admin/employees/{{ $emp->id }}" method="POST" onsubmit="return confirm('Yakin ingin menghapus karyawan ini?')" style="margin: 0;">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn-hover" style="padding: 8px 16px; background: #FFF0F0; border-radius: 8px; color: #BA1A1A; font-size: 14px; font-weight: 700; border: 1px solid #FFDAD6; cursor: pointer;">Hapus</button>
-                        </form>
+
+                        @if($emp->status === 'active')
+                            <form action="/admin/employees/{{ $emp->id }}" method="POST" onsubmit="return confirm('Nonaktifkan karyawan ini? Akses absensinya dicabut, tetapi riwayat absensinya tetap tersimpan.')" style="margin: 0;">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn-hover" style="padding: 8px 16px; background: #FFF0F0; border-radius: 8px; color: #BA1A1A; font-size: 14px; font-weight: 700; border: 1px solid #FFDAD6; cursor: pointer;">Nonaktifkan</button>
+                            </form>
+                        @else
+                            <form action="/admin/employees/{{ $emp->id }}/activate" method="POST" style="margin: 0;">
+                                @csrf
+                                <button type="submit" class="btn-hover" style="padding: 8px 16px; background: rgba(188, 238, 207, 0.30); border-radius: 8px; color: #14422D; font-size: 14px; font-weight: 700; border: 1px solid #BCEECF; cursor: pointer;">Aktifkan</button>
+                            </form>
+                        @endif
                     </div>
                 </div>
             @empty

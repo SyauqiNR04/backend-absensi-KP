@@ -37,6 +37,25 @@
             <label class="form-label">Jabatan</label>
             <input type="text" name="jabatan" value="{{ old('jabatan') }}" class="input-premium" placeholder="Contoh: Staff IT, HRD" required>
         </div>
+        <div>
+            <label class="form-label">Password Awal</label>
+            <input type="password" name="password" class="input-premium" placeholder="Minimal 12 karakter" required>
+            <div style="color: #6B7280; font-size: 13px; margin-top: 6px;">
+                Minimal 12 karakter, mengandung huruf besar &amp; kecil, angka, dan simbol.
+                Password yang pernah bocor di internet akan ditolak.
+            </div>
+        </div>
+        <div>
+            <label class="form-label">Ulangi Password</label>
+            <input type="password" name="password_confirmation" class="input-premium" placeholder="Ketik ulang password" required>
+        </div>
+        <div style="padding: 16px; background: #FFFBEB; border-radius: 12px; border: 1px solid #FDE68A; display: flex; gap: 12px; align-items: flex-start;">
+            <div style="color: #92400E; font-size: 20px;">🔑</div>
+            <div style="color: #0B1C30; font-size: 14px; line-height: 20px;">
+                <strong>Serahkan password ini ke karyawan lewat jalur pribadi</strong> (bukan grup chat).
+                Minta karyawan segera menggantinya sendiri dari aplikasi setelah login pertama.
+            </div>
+        </div>
         <div style="padding: 16px; background: #EFF4FF; border-radius: 12px; border: 1px solid #C0C9C1; display: flex; gap: 12px; align-items: flex-start;">
             <div style="color: #2563EB; font-size: 20px;">ℹ️</div>
             <div style="color: #0B1C30; font-size: 14px; line-height: 20px;">

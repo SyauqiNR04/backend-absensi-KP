@@ -33,7 +33,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/export/{type}', [DashboardController::class, 'export'])->name('admin.export');
     
     // 4. Manajemen Karyawan (CRUD)
+    // DELETE di sini menonaktifkan, bukan menghapus (riwayat absensi dijaga).
     Route::resource('/admin/employees', AdminEmployeeController::class);
+    Route::post('/admin/employees/{id}/activate', [AdminEmployeeController::class, 'activate'])
+        ->name('admin.employees.activate');
     
     // 5. Konfigurasi Geo-Fence & Waktu
     Route::get('/admin/geofence', [AdminGeoFenceController::class, 'index']);

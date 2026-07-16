@@ -10,8 +10,33 @@ class Employee extends Authenticatable
 {
     use HasApiTokens, HasFactory;
 
+    /** Boleh login & absen. */
+    public const STATUS_ACTIVE = 'active';
+
+    /** Resign/diberhentikan: login ditolak, riwayat absensi tetap disimpan. */
+    public const STATUS_INACTIVE = 'inactive';
+
+    /** Terdaftar tapi belum disetujui admin. */
+    public const STATUS_PENDING = 'pending';
+
     protected $table = 'employees';
 
     // Mengizinkan semua kolom diisi secara massal (mass assignment)
     protected $guarded = ['id'];
+
+    public function isActive(): bool
+    {
+        return $this->status === self::STATUS_ACTIVE;
+    }
+
+    /**
+     * Menonaktifkan karyawan sekaligus mencabut seluruh tokennya, sehingga
+     * sesi yang sedang berjalan di HP ikut mati. Tanpa pencabutan token,
+     * karyawan yang sudah resign masih bisa absen sampai tokennya kedaluwarsa.
+     */
+    public function deactivate(): void
+    {
+        $this->forceFill(['status' => self::STATUS_INACTIVE])->save();
+        $this->tokens()->delete();
+    }
 }

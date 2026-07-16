@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Employee;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 use Carbon\Carbon;
 
 class AdminEmployeeController
@@ -22,18 +25,25 @@ class AdminEmployeeController
     }
 
     // 3. STORE: Menangkap data dari formulir dan menyimpannya ke database
+    //
+    // Password WAJIB diisi di sini: login mobile membutuhkannya, dan admin
+    // adalah satu-satunya yang membuat akun (registrasi mandiri ditutup).
+    // Tanpa ini karyawan baru tidak akan pernah bisa masuk ke aplikasi.
     public function store(Request $request)
     {
         $request->validate([
             'nip' => 'required|string|max:50|unique:employees,nip',
             'nama_lengkap' => 'required|string|max:255',
             'jabatan' => 'required|string|max:255',
+            'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
         DB::table('employees')->insert([
             'nip' => $request->nip,
             'nama_lengkap' => $request->nama_lengkap,
             'jabatan' => $request->jabatan,
+            'password' => Hash::make($request->password),
+            'status' => Employee::STATUS_ACTIVE,
             'created_at' => Carbon::now('Asia/Jakarta'),
             'updated_at' => Carbon::now('Asia/Jakarta'),
         ]);
@@ -54,28 +64,74 @@ class AdminEmployeeController
     }
 
     // 5. UPDATE: Menyimpan perubahan data dari formulir edit ke database
+    // Password bersifat opsional di sini: dikosongkan berarti tidak diubah.
+    // Diisi berarti reset — dipakai saat karyawan lupa password, dan untuk
+    // memberi password awal pada karyawan lama yang datanya dibuat sebelum
+    // login berpassword diberlakukan.
     public function update(Request $request, $id)
     {
         $request->validate([
             'nip' => 'required|string|max:50|unique:employees,nip,' . $id,
             'nama_lengkap' => 'required|string|max:255',
             'jabatan' => 'required|string|max:255',
+            'password' => ['nullable', 'confirmed', Password::defaults()],
         ]);
 
-        DB::table('employees')->where('id', $id)->update([
+        $data = [
             'nip' => $request->nip,
             'nama_lengkap' => $request->nama_lengkap,
             'jabatan' => $request->jabatan,
             'updated_at' => Carbon::now('Asia/Jakarta'),
-        ]);
+        ];
+
+        if ($request->filled('password')) {
+            $data['password'] = Hash::make($request->password);
+        }
+
+        DB::table('employees')->where('id', $id)->update($data);
+
+        // Password berganti -> seluruh sesi lama dicabut. Kalau tidak, sesi
+        // yang mungkin sudah dikuasai orang lain tetap hidup meski password
+        // sudah direset.
+        if ($request->filled('password')) {
+            Employee::find($id)?->tokens()->delete();
+        }
 
         return redirect('/admin/employees')->with('success', 'Data karyawan berhasil diperbarui!');
     }
 
-    // 6. DELETE: Menghapus data karyawan dari database
+    // 6. NONAKTIFKAN: Karyawan resign/diberhentikan.
+    //
+    // Sengaja TIDAK menghapus baris. Tabel attendances memakai
+    // onDelete('cascade'), jadi menghapus karyawan ikut menghapus seluruh
+    // riwayat absensinya — bukti penggajian yang tidak bisa dikembalikan.
+    // Menonaktifkan menutup akses (token dicabut) tanpa membuang riwayat.
     public function destroy($id)
     {
-        DB::table('employees')->where('id', $id)->delete();
-        return redirect('/admin/employees')->with('success', 'Data karyawan berhasil dihapus!');
+        $employee = Employee::find($id);
+
+        if (! $employee) {
+            return redirect('/admin/employees')->with('error', 'Data karyawan tidak ditemukan.');
+        }
+
+        $employee->deactivate();
+
+        return redirect('/admin/employees')
+            ->with('success', 'Karyawan dinonaktifkan. Riwayat absensinya tetap tersimpan.');
+    }
+
+    // 7. AKTIFKAN: mengembalikan akses karyawan (mis. salah nonaktifkan,
+    // karyawan kembali bekerja, atau kelak menyetujui pendaftar 'pending').
+    public function activate($id)
+    {
+        $employee = Employee::find($id);
+
+        if (! $employee) {
+            return redirect('/admin/employees')->with('error', 'Data karyawan tidak ditemukan.');
+        }
+
+        $employee->forceFill(['status' => Employee::STATUS_ACTIVE])->save();
+
+        return redirect('/admin/employees')->with('success', 'Karyawan berhasil diaktifkan kembali!');
     }
 }

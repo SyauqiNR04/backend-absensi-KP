@@ -1,8 +1,21 @@
 <?php
+/*
+|==================================================================
+| FITUR: Scheduler
+| Menjadwalkan pembersihan token Sanctum yang kedaluwarsa.
+|==================================================================
+*/
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+/*
+|--------------------------------------------------------------------------
+| Console Routes & Scheduler
+|--------------------------------------------------------------------------
+| Bersihkan token yang sudah kedaluwarsa (lebih dari 24 jam lewat masa
+| berlaku) agar tabel personal_access_tokens tidak menumpuk. Perintah ini
+| disediakan Sanctum. Pastikan cron memanggil `php artisan schedule:run`
+| setiap menit di server.
+*/
+
+Schedule::command('sanctum:prune-expired --hours=24')->daily();
