@@ -64,7 +64,14 @@
                     </div>
                     
                     <div style="width: 150px; padding: 20px 24px;">
-                        @if($emp->status === 'active')
+                        @if(empty($emp->password))
+                            {{-- Tanpa password, karyawan tidak bisa login walau statusnya aktif.
+                                 Terjadi pada data yang dibuat sebelum login berpassword ada. --}}
+                            <a href="/admin/employees/{{ $emp->id }}/edit" style="display: inline-flex; padding: 6px 12px; background: rgba(255, 218, 214, 0.40); border-radius: 9999px; border: 1px solid #FFDAD6; align-items: center; gap: 6px; text-decoration: none;">
+                                <div style="width: 8px; height: 8px; background: #BA1A1A; border-radius: 50%;"></div>
+                                <div style="color: #BA1A1A; font-size: 12px; font-weight: 700;">Perlu Password</div>
+                            </a>
+                        @elseif($emp->status === 'active')
                             <div style="display: inline-flex; padding: 6px 12px; background: rgba(188, 238, 207, 0.30); border-radius: 9999px; border: 1px solid #BCEECF; align-items: center; gap: 6px;">
                                 <div style="width: 8px; height: 8px; background: #14422D; border-radius: 50%;"></div>
                                 <div style="color: #14422D; font-size: 12px; font-weight: 700;">Aktif</div>

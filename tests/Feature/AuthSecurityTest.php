@@ -52,6 +52,22 @@ class AuthSecurityTest extends TestCase
         $this->assertSame($existing, $missing);
     }
 
+    /**
+     * Karyawan lama (dibuat sebelum login berpassword) punya password NULL.
+     * Percobaan login harus ditolak wajar (401), bukan meledak jadi 500.
+     */
+    public function test_employee_without_password_is_rejected_cleanly(): void
+    {
+        Employee::create([
+            'nip'          => '54321',
+            'nama_lengkap' => 'Karyawan Lama',
+            'jabatan'      => 'Staf',
+        ]);
+
+        $this->postJson('/api/login', ['nip' => '54321', 'password' => 'apa-saja'])
+            ->assertStatus(401);
+    }
+
     /** Kredensial benar -> token + expires_in. */
     public function test_valid_login_returns_token(): void
     {

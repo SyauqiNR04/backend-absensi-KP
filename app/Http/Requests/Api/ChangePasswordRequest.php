@@ -27,7 +27,7 @@ class ChangePasswordRequest extends FormRequest
                 'required',
                 'confirmed',
                 'different:current_password',
-                Password::min(12)->mixedCase()->numbers()->symbols()->uncompromised(),
+                Password::defaults(), // kebijakan tunggal, lihat AppServiceProvider
             ],
         ];
     }
