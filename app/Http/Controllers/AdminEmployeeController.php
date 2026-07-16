@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Employee;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -72,10 +73,38 @@ class AdminEmployeeController
         return redirect('/admin/employees')->with('success', 'Data karyawan berhasil diperbarui!');
     }
 
-    // 6. DELETE: Menghapus data karyawan dari database
+    // 6. NONAKTIFKAN: Karyawan resign/diberhentikan.
+    //
+    // Sengaja TIDAK menghapus baris. Tabel attendances memakai
+    // onDelete('cascade'), jadi menghapus karyawan ikut menghapus seluruh
+    // riwayat absensinya — bukti penggajian yang tidak bisa dikembalikan.
+    // Menonaktifkan menutup akses (token dicabut) tanpa membuang riwayat.
     public function destroy($id)
     {
-        DB::table('employees')->where('id', $id)->delete();
-        return redirect('/admin/employees')->with('success', 'Data karyawan berhasil dihapus!');
+        $employee = Employee::find($id);
+
+        if (! $employee) {
+            return redirect('/admin/employees')->with('error', 'Data karyawan tidak ditemukan.');
+        }
+
+        $employee->deactivate();
+
+        return redirect('/admin/employees')
+            ->with('success', 'Karyawan dinonaktifkan. Riwayat absensinya tetap tersimpan.');
+    }
+
+    // 7. AKTIFKAN: mengembalikan akses karyawan (mis. salah nonaktifkan,
+    // karyawan kembali bekerja, atau kelak menyetujui pendaftar 'pending').
+    public function activate($id)
+    {
+        $employee = Employee::find($id);
+
+        if (! $employee) {
+            return redirect('/admin/employees')->with('error', 'Data karyawan tidak ditemukan.');
+        }
+
+        $employee->forceFill(['status' => Employee::STATUS_ACTIVE])->save();
+
+        return redirect('/admin/employees')->with('success', 'Karyawan berhasil diaktifkan kembali!');
     }
 }

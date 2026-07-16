@@ -57,6 +57,26 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // Status diperiksa SETELAH password terbukti benar. Urutan ini penting:
+        // pesan spesifik di bawah hanya bisa dilihat oleh pemilik kredensial,
+        // sehingga tidak bisa dipakai menebak NIP mana yang terdaftar.
+        if (! $employee->isActive()) {
+            AuditLog::record('auth.login_blocked', [
+                'employee_id' => $employee->id,
+                'severity'    => 'warning',
+                'context'     => ['nip' => $employee->nip, 'status' => $employee->status],
+            ]);
+
+            $message = $employee->status === Employee::STATUS_PENDING
+                ? 'Akun Anda belum disetujui admin.'
+                : 'Akun Anda tidak aktif. Hubungi admin.';
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+            ], 403);
+        }
+
         // Batasi akumulasi sesi (maks 5 device aktif).
         if ($employee->tokens()->count() >= 5) {
             $employee->tokens()->oldest()->first()?->delete();
