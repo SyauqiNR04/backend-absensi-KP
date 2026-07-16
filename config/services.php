@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'play_integrity' => [
+        'enabled' => (bool) env('PLAY_INTEGRITY_ENABLED', false),
+        'package' => env('PLAY_INTEGRITY_PACKAGE', ''),
+    ],
+
+    'security_alert' => [
+        'webhook' => env('SECURITY_ALERT_WEBHOOK'),
+    ],
+
 ];

@@ -1,48 +1,58 @@
 <?php
+/*
+|==================================================================
+| FITUR: Rute API
+| Memetakan endpoint publik/tertutup beserta middleware keamanan (throttle, ability, device.integrity, attestation).
+|==================================================================
+*/
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-// Import Controller yang dibutuhkan
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\Api\PasswordController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\SettingController;
 
-// ==========================================
-// AREA PUBLIK (Tidak butuh Token / Login)
-// ==========================================
+/*
+|--------------------------------------------------------------------------
+| API Routes (HARDENED)
+|--------------------------------------------------------------------------
+|  - /login dibungkus limiter 'login' (anti brute force, per NIP+IP).
+|  - POST /employees (registrasi publik) DIHAPUS.
+|  - /refresh merotasi token sebelum kedaluwarsa (Phase 2).
+|  - POST /attendances: ability token + device integrity.
+*/
 
-// 1. Karyawan melakukan Login dari HP
-Route::post('/login', [AuthController::class, 'login']);
+// ======================= AREA PUBLIK =======================
+Route::middleware('throttle:api')->group(function () {
+    Route::post('/login', [AuthController::class, 'login'])
+        ->middleware('throttle:login');
 
-// 2. Aplikasi mengambil koordinat & radius kantor (Bisa diletakkan di luar agar HP bisa mengecek lokasi sebelum absen)
-Route::get('/settings', [SettingController::class, 'index']);
+    Route::get('/settings', [SettingController::class, 'index']);
+});
 
-// 3. Mendaftarkan karyawan via API (Opsional, karena sekarang Anda sudah punya form Tambah Karyawan di Web)
-Route::post('/employees', [EmployeeController::class, 'store']);
-
-
-// ==========================================
-// AREA TERTUTUP (Wajib bawa Token dari Login)
-// ==========================================
+// ======================= AREA TERTUTUP =======================
 Route::middleware('auth:sanctum')->group(function () {
-    
-    // 1. Cek profil karyawan yang sedang login
-    Route::get('/user', function (Request $request) {
-        return response()->json([
-            'success' => true,
-            'data' => $request->user()
-        ]);
-    });
 
-    // 2. Karyawan Logout dari HP
+    Route::get('/user', fn (Request $request) => response()->json([
+        'success' => true,
+        'data'    => $request->user(),
+    ]));
+
+    // Rotasi token (harus dipanggil selagi token masih valid).
+    Route::post('/refresh', [AuthController::class, 'refresh']);
+
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // 3. Karyawan mengirim data absensi masuk/pulang
-    Route::post('/attendances', [AttendanceController::class, 'store']);
+    // Ganti password (butuh password lama + kebijakan kuat).
+    Route::post('/password', [PasswordController::class, 'change']);
 
-    // 4. Aplikasi mengambil riwayat absensi karyawan tersebut
-    Route::get('/attendances/{nip}', [AttendanceController::class, 'history']);
-    Route::get('/history/{nip}', [AttendanceController::class, 'history']); // Rute alternatif
+    Route::post('/attendances', [AttendanceController::class, 'store'])
+        ->middleware(['ability:attendance:submit', 'device.integrity', 'attestation']);
+
+    Route::get('/attendances/{nip}', [AttendanceController::class, 'history'])
+        ->middleware('ability:attendance:read');
+    Route::get('/history/{nip}', [AttendanceController::class, 'history'])
+        ->middleware('ability:attendance:read');
 });

@@ -1,117 +1,138 @@
 <?php
+/*
+|==================================================================
+| FITUR: Absensi
+| Submit absensi aman (identitas dari token, bukan body), geo-fence, deteksi anomali lokasi, audit log, dan riwayat anti-IDOR.
+|==================================================================
+*/
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use App\Http\Requests\Api\StoreAttendanceRequest;
+use App\Models\Attendance;
+use App\Models\AuditLog;
+use App\Models\Setting;
+use App\Services\Security\LocationAnomalyDetector;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 
+/**
+ * AttendanceController (HARDENED + Phase 3: anomaly detection & audit log)
+ * -------------------------------------------------------------------------
+ *  - Identitas dari token ($request->user()), bukan body (anti-spoofing).
+ *  - IDOR guard pada history().
+ *  - Eloquent parameter-binding (anti-SQLi).
+ *  - Foto: nama acak, disk privat.
+ *  - Phase 3: deteksi impossible-travel + pencatatan audit setiap event.
+ */
 class AttendanceController extends Controller
 {
-    // Fungsi matematika (Haversine Formula) untuk menghitung jarak antara 2 koordinat GPS dalam hitungan meter
-    private function hitungJarak($lat1, $lon1, $lat2, $lon2)
+    public function __construct(private LocationAnomalyDetector $anomalyDetector)
     {
-        $earthRadius = 6371000; // Radius bumi dalam meter
-        $dLat = deg2rad($lat2 - $lat1);
-        $dLon = deg2rad($lon2 - $lon1);
-        
-        $a = sin($dLat/2) * sin($dLat/2) + 
-             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon/2) * sin($dLon/2);
-             
-        $c = 2 * atan2(sqrt($a), sqrt(1-$a));
-        
-        return $earthRadius * $c;
     }
 
-    // Fungsi menerima kiriman absen dari aplikasi mobile
-    public function store(Request $request)
+    private function hitungJarak($lat1, $lon1, $lat2, $lon2): float
     {
-        // 1. Validasi Input dari HP (Harus ada NIP, Koordinat, dan File Foto)
-        $request->validate([
-            'nip' => 'required|string',
-            'latitude' => 'required|numeric',
-            'longitude' => 'required|numeric',
-            'foto' => 'required|image|mimes:jpeg,png,jpg|max:2048'
-        ]);
+        $r = 6371000;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        $a = sin($dLat / 2) ** 2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLon / 2) ** 2;
+        return $r * (2 * atan2(sqrt($a), sqrt(1 - $a)));
+    }
 
-        // 2. Ambil ID Karyawan berdasarkan NIP
-        $employee = DB::table('employees')->where('nip', $request->nip)->first();
-        if (!$employee) {
-            return response()->json(['success' => false, 'message' => 'Karyawan tidak terdaftar.'], 404);
-        }
-
+    public function store(StoreAttendanceRequest $request): JsonResponse
+    {
+        $employee = $request->user();
         $waktuSekarang = Carbon::now('Asia/Jakarta');
+        $lat = (float) $request->input('latitude');
+        $lon = (float) $request->input('longitude');
 
-        // 3. Cek apakah karyawan sudah absen hari ini agar tidak dobel
-        $sudahAbsen = DB::table('attendances')
-            ->where('employee_id', $employee->id)
+        // Cegah duplikasi harian.
+        $sudahAbsen = Attendance::where('employee_id', $employee->id)
             ->whereDate('waktu_absen', $waktuSekarang->toDateString())
             ->exists();
-
         if ($sudahAbsen) {
-            return response()->json(['success' => false, 'message' => 'Anda sudah melakukan absensi hari ini.'], 400);
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda sudah melakukan absensi hari ini.',
+            ], 409);
         }
 
-        // 4. Ambil Pengaturan Geo-Fence & Jam Kerja dari Database
-        $setting = DB::table('settings')->first();
-        if (!$setting) {
-            return response()->json(['success' => false, 'message' => 'Sistem belum dikonfigurasi oleh Admin.'], 500);
+        $setting = Setting::first();
+        if (! $setting) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sistem belum dikonfigurasi oleh Admin.',
+            ], 500);
         }
 
-        // 5. Validasi Jarak (Geo-Fence)
-        $jarak = $this->hitungJarak($setting->latitude, $setting->longitude, $request->latitude, $request->longitude);
+        // Geo-fence.
+        $jarak = $this->hitungJarak($setting->latitude, $setting->longitude, $lat, $lon);
         if ($jarak > $setting->radius_meter) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal! Anda berada di luar area kantor. Jarak Anda: ' . round($jarak) . ' meter.'
+                'message' => 'Gagal! Anda berada di luar area kantor. Jarak Anda: ' . round($jarak) . ' meter.',
             ], 403);
         }
 
-        // 6. Penentuan Status Keterlambatan
-        $jamMasuk = Carbon::parse($setting->jam_masuk, 'Asia/Jakarta');
-        // Jika waktu absen lebih besar (melewati) jam masuk = Terlambat
-        $status = $waktuSekarang->gt($jamMasuk) ? 'terlambat' : 'hadir';
-
-        // 7. Simpan Foto Selfie ke Server
-        $fotoPath = null;
-        if ($request->hasFile('foto')) {
-            // Akan otomatis masuk ke folder storage/app/public/absensi
-            $fotoPath = $request->file('foto')->store('absensi', 'public');
+        // Phase 3: deteksi impossible-travel (behavioral anti Fake GPS).
+        $anomaly = $this->anomalyDetector->evaluate($employee->id, $lat, $lon, $waktuSekarang);
+        if ($anomaly['is_anomaly']) {
+            AuditLog::record('location.anomaly', [
+                'employee_id' => $employee->id,
+                'severity'    => 'critical',
+                'context'     => [
+                    'speed_kmh' => $anomaly['speed_kmh'],
+                    'lat'       => $lat,
+                    'lon'       => $lon,
+                ],
+            ]);
+            return response()->json([
+                'success' => false,
+                'code'    => 'LOCATION_ANOMALY',
+                'message' => 'Absensi ditinjau: ' . $anomaly['reason'],
+            ], 422);
         }
 
-        // 8. Masukkan Data ke Database Utama
-        DB::table('attendances')->insert([
+        $jamMasuk = Carbon::parse($setting->jam_masuk, 'Asia/Jakarta');
+        $status = $waktuSekarang->gt($jamMasuk) ? 'terlambat' : 'hadir';
+
+        // Foto: nama acak, disk privat.
+        $fotoPath = $request->file('foto')->store('absensi', 'private');
+
+        Attendance::create([
             'employee_id' => $employee->id,
             'waktu_absen' => $waktuSekarang,
-            'status' => $status,
-            'latitude' => $request->latitude,
-            'longitude' => $request->longitude,
-            'foto_bukti' => $fotoPath,
-            'created_at' => $waktuSekarang,
-            'updated_at' => $waktuSekarang,
+            'status'      => $status,
+            'latitude'    => $lat,
+            'longitude'   => $lon,
+            'foto_bukti'  => $fotoPath,
+        ]);
+
+        AuditLog::record('attendance.created', [
+            'employee_id' => $employee->id,
+            'severity'    => 'info',
+            'context'     => ['status' => $status, 'jarak_meter' => round($jarak)],
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Absensi berhasil direkam!',
             'data' => [
-                'status' => ucfirst($status),
-                'waktu' => $waktuSekarang->format('H:i:s WIB'),
-                'jarak_meter' => round($jarak)
-            ]
-        ], 200);
+                'status'      => ucfirst($status),
+                'waktu'       => $waktuSekarang->format('H:i:s') . ' WIB',
+                'jarak_meter' => round($jarak),
+            ],
+        ], 201);
     }
 
-    // Fungsi tambahan untuk mengirim data riwayat ke HP karyawan
-    public function history($nip)
+    public function history(): JsonResponse
     {
-        $employee = DB::table('employees')->where('nip', $nip)->first();
-        if (!$employee) return response()->json(['success' => false, 'message' => 'Data tidak ditemukan.'], 404);
+        $employee = request()->user();
 
-        $riwayat = DB::table('attendances')
-            ->where('employee_id', $employee->id)
-            ->orderBy('waktu_absen', 'desc')
-            ->limit(30) // Tampilkan batas 30 hari terakhir di HP
+        $riwayat = Attendance::where('employee_id', $employee->id)
+            ->orderByDesc('waktu_absen')
+            ->limit(30)
             ->get();
 
         return response()->json(['success' => true, 'data' => $riwayat], 200);
