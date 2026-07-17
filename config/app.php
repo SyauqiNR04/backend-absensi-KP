@@ -65,7 +65,12 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    // MySQL server di sini berjalan dengan time_zone=SYSTEM (Asia/Jakarta,
+    // lihat waktu OS). Timezone app HARUS disamakan, kalau tidak Eloquent
+    // salah menandai nilai TIMESTAMP yang dibaca dari DB sebagai UTC padahal
+    // sebenarnya WIB -> semua perhitungan durasi (mis. total jam kerja
+    // absen pulang) meleset 7 jam.
+    'timezone' => 'Asia/Jakarta',
 
     /*
     |--------------------------------------------------------------------------

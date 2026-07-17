@@ -15,6 +15,8 @@ use App\Models\Setting;
 use App\Services\Security\LocationAnomalyDetector;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * AttendanceController (HARDENED + Phase 3: anomaly detection & audit log)
@@ -40,23 +42,17 @@ class AttendanceController extends Controller
         return $r * (2 * atan2(sqrt($a), sqrt(1 - $a)));
     }
 
+    /**
+     * Submit absensi. Submit PERTAMA di hari itu = absen MASUK (buat record
+     * baru). Submit KEDUA = absen PULANG (update record yang sama dengan
+     * waktu_pulang + hitung total jam kerja). Submit KETIGA dst ditolak.
+     */
     public function store(StoreAttendanceRequest $request): JsonResponse
     {
         $employee = $request->user();
         $waktuSekarang = Carbon::now('Asia/Jakarta');
         $lat = (float) $request->input('latitude');
         $lon = (float) $request->input('longitude');
-
-        // Cegah duplikasi harian.
-        $sudahAbsen = Attendance::where('employee_id', $employee->id)
-            ->whereDate('waktu_absen', $waktuSekarang->toDateString())
-            ->exists();
-        if ($sudahAbsen) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Anda sudah melakukan absensi hari ini.',
-            ], 409);
-        }
 
         $setting = Setting::first();
         if (! $setting) {
@@ -66,7 +62,7 @@ class AttendanceController extends Controller
             ], 500);
         }
 
-        // Geo-fence.
+        // Geo-fence (berlaku untuk absen masuk maupun pulang).
         $jarak = $this->hitungJarak($setting->latitude, $setting->longitude, $lat, $lon);
         if ($jarak > $setting->radius_meter) {
             return response()->json([
@@ -94,11 +90,38 @@ class AttendanceController extends Controller
             ], 422);
         }
 
+        $absenHariIni = Attendance::where('employee_id', $employee->id)
+            ->whereDate('waktu_absen', $waktuSekarang->toDateString())
+            ->first();
+
+        // Foto: nama acak, disk privat (storage/app/private, tidak bisa diakses lewat URL publik).
+        $fotoPath = $request->file('foto')->store('absensi', 'local');
+
+        if (! $absenHariIni) {
+            return $this->absenMasuk($employee, $waktuSekarang, $lat, $lon, $jarak, $fotoPath, $setting);
+        }
+
+        if ($absenHariIni->waktu_pulang) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda sudah menyelesaikan absensi hari ini (masuk & pulang).',
+            ], 409);
+        }
+
+        return $this->absenPulang($absenHariIni, $waktuSekarang, $lat, $lon, $jarak, $fotoPath);
+    }
+
+    private function absenMasuk(
+        $employee,
+        Carbon $waktuSekarang,
+        float $lat,
+        float $lon,
+        float $jarak,
+        string $fotoPath,
+        Setting $setting,
+    ): JsonResponse {
         $jamMasuk = Carbon::parse($setting->jam_masuk, 'Asia/Jakarta');
         $status = $waktuSekarang->gt($jamMasuk) ? 'terlambat' : 'hadir';
-
-        // Foto: nama acak, disk privat.
-        $fotoPath = $request->file('foto')->store('absensi', 'private');
 
         Attendance::create([
             'employee_id' => $employee->id,
@@ -117,13 +140,101 @@ class AttendanceController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Absensi berhasil direkam!',
+            'message' => 'Absen masuk berhasil direkam!',
             'data' => [
+                'type'        => 'masuk',
                 'status'      => ucfirst($status),
                 'waktu'       => $waktuSekarang->format('H:i:s') . ' WIB',
                 'jarak_meter' => round($jarak),
             ],
         ], 201);
+    }
+
+    private function absenPulang(
+        Attendance $absenHariIni,
+        Carbon $waktuSekarang,
+        float $lat,
+        float $lon,
+        float $jarak,
+        string $fotoPath,
+    ): JsonResponse {
+        $absenHariIni->update([
+            'waktu_pulang'     => $waktuSekarang,
+            'foto_pulang'      => $fotoPath,
+            'latitude_pulang'  => $lat,
+            'longitude_pulang' => $lon,
+        ]);
+
+        $menitKerja = (int) round($absenHariIni->waktu_absen->diffInMinutes($waktuSekarang));
+        $jamKerja = intdiv($menitKerja, 60);
+        $sisaMenit = $menitKerja % 60;
+
+        AuditLog::record('attendance.checkout', [
+            'employee_id' => $absenHariIni->employee_id,
+            'severity'    => 'info',
+            'context'     => ['menit_kerja' => $menitKerja, 'jarak_meter' => round($jarak)],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Absen pulang berhasil direkam!',
+            'data' => [
+                'type'              => 'pulang',
+                'waktu'             => $waktuSekarang->format('H:i:s') . ' WIB',
+                'jarak_meter'       => round($jarak),
+                'total_menit_kerja' => $menitKerja,
+                'total_jam_kerja'   => sprintf('%dh %02dm', $jamKerja, $sisaMenit),
+            ],
+        ], 200);
+    }
+
+    /**
+     * Status absensi HARI INI milik pemilik token -- dipakai dashboard klien
+     * agar tahu tombol berikutnya "Absen Masuk" atau "Absen Pulang", dan
+     * bisa menampilkan arrival time / total jam kerja yang sinkron dengan
+     * data asli (bukan placeholder statis).
+     */
+    public function today(): JsonResponse
+    {
+        $employee = request()->user();
+        $sekarang = Carbon::now('Asia/Jakarta');
+
+        $absen = Attendance::where('employee_id', $employee->id)
+            ->whereDate('waktu_absen', $sekarang->toDateString())
+            ->first();
+
+        $setting = Setting::first();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'server_time' => $sekarang->toIso8601String(),
+                'jam_masuk_kantor'  => $setting?->jam_masuk,
+                'jam_pulang_kantor' => $setting?->jam_pulang,
+                'attendance' => $absen,
+            ],
+        ], 200);
+    }
+
+    /**
+     * Menyajikan foto referensi wajah milik PEMILIK TOKEN sendiri (bukan dari
+     * parameter URL) -- sama seperti history(), identitas selalu dari token
+     * agar tidak ada IDOR yang membocorkan foto karyawan lain.
+     */
+    public function referencePhoto(): JsonResponse|StreamedResponse
+    {
+        $employee = request()->user();
+
+        if (! $employee->foto_referensi || ! Storage::disk('local')->exists($employee->foto_referensi)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Foto referensi belum diset oleh admin.',
+            ], 404);
+        }
+
+        return Storage::disk('local')->response($employee->foto_referensi, null, [
+            'Cache-Control' => 'no-store',
+        ]);
     }
 
     public function history(): JsonResponse

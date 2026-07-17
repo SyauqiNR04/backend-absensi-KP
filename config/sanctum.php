@@ -14,8 +14,8 @@ use Laravel\Sanctum\Sanctum;
 |--------------------------------------------------------------------------
 | 'expiration' (menit) membuat token TIDAK berlaku selamanya. Versi lama
 | menerbitkan token tanpa masa berlaku -> jika token dicuri, valid selamanya
-| (OWASP A07 / M3). Di sini access token berumur pendek (8 jam kerja) dan
-| di-rotasi lewat endpoint /refresh sebelum kedaluwarsa.
+| (OWASP A07 / M3). Token tetap punya masa berlaku dan bisa di-rotasi lewat
+| endpoint /refresh sebelum kedaluwarsa.
 |
 | Token yang sudah lewat 'expiration' otomatis dianggap invalid oleh Sanctum,
 | namun barisnya tetap ada di DB -> jalankan `sanctum:prune-expired` terjadwal
@@ -28,8 +28,11 @@ return [
 
     'guard' => ['web'],
 
-    // 8 jam = satu hari kerja. Sesuaikan dengan kebijakan perusahaan.
-    'expiration' => (int) env('SANCTUM_EXPIRATION', 480),
+    // 30 hari (43200 menit) — dipilih demi kenyamanan pengguna agar tidak
+    // sering login ulang. Trade-off: jendela pemakaian token curian ikut
+    // melebar dibanding rekomendasi 8 jam di SECURITY_AUDIT.md, jadi
+    // pencabutan token saat logout & ganti password jadi makin penting.
+    'expiration' => (int) env('SANCTUM_EXPIRATION', 43200),
 
     // Buffer refresh: token boleh di-refresh kapan pun selagi masih valid.
     'token_prefix' => env('SANCTUM_TOKEN_PREFIX', ''),
