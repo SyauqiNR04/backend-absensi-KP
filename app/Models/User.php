@@ -10,7 +10,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password'])]
+/**
+ * Akun admin panel web (bukan karyawan). Skema tabelnya dikustomisasi:
+ * tiap admin terikat ke satu employee lewat employee_id + nip, dan tidak
+ * punya kolom name maupun email_verified_at seperti bawaan Laravel.
+ */
+#[Fillable(['employee_id', 'nip', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -25,7 +30,6 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
