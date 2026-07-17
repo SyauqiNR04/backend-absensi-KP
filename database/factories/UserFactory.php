@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -9,6 +10,10 @@ use Illuminate\Support\Str;
 
 /**
  * @extends Factory<User>
+ *
+ * Mengikuti skema users yang sebenarnya: tiap admin terhubung ke satu
+ * employee (employee_id NOT NULL + FK). Tidak ada kolom name maupun
+ * email_verified_at, jadi keduanya tidak diisi di sini.
  */
 class UserFactory extends Factory
 {
@@ -24,22 +29,18 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
+        $nip = 'ADM-' . fake()->unique()->numerify('#####');
+
         return [
-            'name' => fake()->name(),
-            'email' => fake()->unique()->safeEmail(),
-            'email_verified_at' => now(),
-            'password' => static::$password ??= Hash::make('password'),
+            'employee_id' => fn () => Employee::create([
+                'nip'          => $nip,
+                'nama_lengkap' => fake()->name(),
+                'jabatan'      => 'Administrator',
+            ])->id,
+            'nip'            => $nip,
+            'email'          => fake()->unique()->safeEmail(),
+            'password'       => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
         ];
-    }
-
-    /**
-     * Indicate that the model's email address should be unverified.
-     */
-    public function unverified(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'email_verified_at' => null,
-        ]);
     }
 }

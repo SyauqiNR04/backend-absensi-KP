@@ -61,7 +61,7 @@ class AdminEmployeePasswordTest extends TestCase
     {
         $this->post('/admin/employees', $this->payload());
 
-        $stored = Employee::first()->password;
+        $stored = Employee::where('nip', '12345')->first()->password;
 
         $this->assertNotSame(self::STRONG, $stored);
         $this->assertTrue(Hash::check(self::STRONG, $stored));
@@ -75,7 +75,7 @@ class AdminEmployeePasswordTest extends TestCase
             'password_confirmation' => '',
         ]))->assertSessionHasErrors('password');
 
-        $this->assertDatabaseCount('employees', 0);
+        $this->assertDatabaseMissing('employees', ['nip' => '12345']);
     }
 
     /** Kebijakan password kuat ditegakkan (min 12, campuran, simbol). */
@@ -86,7 +86,7 @@ class AdminEmployeePasswordTest extends TestCase
             'password_confirmation' => 'password',
         ]))->assertSessionHasErrors('password');
 
-        $this->assertDatabaseCount('employees', 0);
+        $this->assertDatabaseMissing('employees', ['nip' => '12345']);
     }
 
     /** Konfirmasi yang tidak cocok ditolak. */
@@ -96,7 +96,7 @@ class AdminEmployeePasswordTest extends TestCase
             'password_confirmation' => 'Beda!Sekali9#xy',
         ]))->assertSessionHasErrors('password');
 
-        $this->assertDatabaseCount('employees', 0);
+        $this->assertDatabaseMissing('employees', ['nip' => '12345']);
     }
 
     /** Edit tanpa mengisi password tidak boleh mengubah password. */
