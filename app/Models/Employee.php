@@ -24,6 +24,14 @@ class Employee extends Authenticatable
     // Mengizinkan semua kolom diisi secara massal (mass assignment)
     protected $guarded = ['id'];
 
+    /**
+     * GET /api/user mengembalikan model ini apa adanya. Tanpa daftar ini,
+     * hash password dan face_embedding (template biometrik) ikut terkirim ke
+     * aplikasi klien — data yang tidak pernah dibutuhkan UI dan berbahaya bila
+     * respons ter-log atau ter-cache.
+     */
+    protected $hidden = ['password', 'remember_token', 'face_embedding'];
+
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;

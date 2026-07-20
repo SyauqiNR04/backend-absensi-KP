@@ -49,17 +49,21 @@
                         <div style="color: #0B1C30; font-size: 16px;">{{ $emp->jabatan }}</div>
                     </div>
                     
+                    {{-- Sumber kebenarannya foto_referensi, bukan face_embedding:
+                         pencocokan wajah kini dilakukan di aplikasi terhadap foto
+                         yang diunggah admin, sehingga face_embedding tidak pernah terisi. --}}
                     <div style="width: 180px; padding: 20px 24px;">
-                        @if($emp->face_embedding)
-                            <div style="display: inline-flex; padding: 6px 12px; background: rgba(188, 238, 207, 0.30); border-radius: 9999px; border: 1px solid #BCEECF; align-items: center; gap: 6px;">
-                                <div style="width: 8px; height: 8px; background: #14422D; border-radius: 50%;"></div>
+                        @if($emp->foto_referensi)
+                            <a href="/admin/employees/{{ $emp->id }}/edit" style="display: inline-flex; padding: 6px 12px; background: rgba(188, 238, 207, 0.30); border-radius: 9999px; border: 1px solid #BCEECF; align-items: center; gap: 8px; text-decoration: none;">
+                                <img src="{{ route('admin.employees.photo', $emp->id) }}" alt=""
+                                     style="width: 20px; height: 20px; object-fit: cover; border-radius: 50%;">
                                 <div style="color: #14422D; font-size: 12px; font-weight: 700;">Terdaftar</div>
-                            </div>
+                            </a>
                         @else
-                            <div style="display: inline-flex; padding: 6px 12px; background: rgba(255, 218, 214, 0.40); border-radius: 9999px; border: 1px solid #FFDAD6; align-items: center; gap: 6px;">
+                            <a href="/admin/employees/{{ $emp->id }}/edit" style="display: inline-flex; padding: 6px 12px; background: rgba(255, 218, 214, 0.40); border-radius: 9999px; border: 1px solid #FFDAD6; align-items: center; gap: 6px; text-decoration: none;">
                                 <div style="width: 8px; height: 8px; background: #BA1A1A; border-radius: 50%;"></div>
-                                <div style="color: #BA1A1A; font-size: 12px; font-weight: 700;">Belum Rekam</div>
-                            </div>
+                                <div style="color: #BA1A1A; font-size: 12px; font-weight: 700;">Belum Ada Foto</div>
+                            </a>
                         @endif
                     </div>
                     

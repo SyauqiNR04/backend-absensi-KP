@@ -26,7 +26,7 @@ class AccessControlTest extends TestCase
         $a = Employee::create(['nip' => 'AAA', 'nama_lengkap' => 'A', 'jabatan' => 'Staf', 'password' => Hash::make('x')]);
         $b = Employee::create(['nip' => 'BBB', 'nama_lengkap' => 'B', 'jabatan' => 'Staf', 'password' => Hash::make('x')]);
 
-        Attendance::create(['employee_id' => $b->id, 'waktu_absen' => now(), 'status' => 'hadir', 'latitude' => 0, 'longitude' => 0]);
+        Attendance::create(['employee_id' => $b->id, 'waktu_absen' => now(), 'status' => 'hadir', 'latitude' => 0, 'longitude' => 0, 'foto_bukti' => 'absensi/uji.jpg']);
 
         Sanctum::actingAs($a, ['attendance:read']);
 

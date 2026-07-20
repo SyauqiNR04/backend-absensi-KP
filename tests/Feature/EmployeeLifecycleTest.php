@@ -89,6 +89,7 @@ class EmployeeLifecycleTest extends TestCase
             'status'      => 'hadir',
             'latitude'    => -6.2088,
             'longitude'   => 106.8456,
+            'foto_bukti'  => 'absensi/uji.jpg',
         ]);
 
         $employee->deactivate();

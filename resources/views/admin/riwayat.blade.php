@@ -59,7 +59,8 @@
                     <div style="flex: 1; padding: 0 24px; display: flex; justify-content: center;">
                         <div style="width: 48px; height: 48px; border-radius: 8px; border: 2px solid {{ $borderStatus }}; overflow: hidden;">
                             @if($absen->foto_bukti)
-                                <a href="{{ asset('storage/' . $absen->foto_bukti) }}" target="_blank"><img src="{{ asset('storage/' . $absen->foto_bukti) }}" style="width: 100%; height: 100%; object-fit: cover;"/></a>
+                                @php $fotoUrl = route('admin.attendances.photo', ['id' => $absen->id, 'type' => 'masuk']); @endphp
+                                <a href="{{ $fotoUrl }}" target="_blank"><img src="{{ $fotoUrl }}" style="width: 100%; height: 100%; object-fit: cover;"/></a>
                             @else
                                 <div style="width: 100%; height: 100%; background: #C0C9C1; display: flex; align-items: center; justify-content: center;"><span style="color: white; font-size: 10px;">No Pic</span></div>
                             @endif

@@ -10,8 +10,10 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Api\StoreAttendanceRequest;
 use App\Models\Attendance;
+use App\Models\AttendanceEvidence;
 use App\Models\AuditLog;
 use App\Models\Setting;
+use App\Services\Security\FaceEvidenceValidator;
 use App\Services\Security\LocationAnomalyDetector;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -29,8 +31,45 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class AttendanceController extends Controller
 {
-    public function __construct(private LocationAnomalyDetector $anomalyDetector)
+    public function __construct(
+        private LocationAnomalyDetector $anomalyDetector,
+        private FaceEvidenceValidator $evidenceValidator,
+    ) {
+    }
+
+    /**
+     * Mencatat bukti verifikasi wajah untuk satu event absensi.
+     *
+     * Selalu dicatat, termasuk saat buktinya kosong atau ditandai janggal --
+     * justru absensi tanpa bukti itulah yang paling perlu terlihat saat audit.
+     * Temuan yang tidak sampai membatalkan absensi tetap masuk audit log
+     * dengan severity 'warning' supaya muncul di pemantauan, bukan terkubur
+     * di satu baris tabel yang tak pernah dibuka.
+     */
+    private function simpanBukti(Attendance $absen, string $type, array $evidence): void
     {
+        $flags = $evidence['flags'];
+
+        AttendanceEvidence::create(array_merge($evidence['normalized'], [
+            'attendance_id' => $absen->id,
+            'employee_id'   => $absen->employee_id,
+            'type'          => $type,
+            'flags'         => $flags ?: null,
+            'is_flagged'    => $flags !== [],
+        ]));
+
+        if ($flags !== []) {
+            AuditLog::record('attendance.evidence_flagged', [
+                'employee_id' => $absen->employee_id,
+                'severity'    => 'warning',
+                'context'     => [
+                    'attendance_id' => $absen->id,
+                    'type'          => $type,
+                    'flags'         => $flags,
+                    'score'         => $evidence['normalized']['face_match_score'],
+                ],
+            ]);
+        }
     }
 
     private function hitungJarak($lat1, $lon1, $lat2, $lon2): float
@@ -90,25 +129,52 @@ class AttendanceController extends Controller
             ], 422);
         }
 
+        // Penilaian bukti verifikasi wajah dilakukan SEBELUM foto disimpan,
+        // supaya absensi yang ditolak tidak meninggalkan berkas yatim di disk.
+        $evidence = $this->evidenceValidator->evaluate(
+            $employee->id,
+            $request->evidenceClaim(),
+            $waktuSekarang,
+        );
+
+        if ($evidence['reject_reason'] !== null) {
+            AuditLog::record('attendance.evidence_rejected', [
+                'employee_id' => $employee->id,
+                'severity'    => 'warning',
+                'context'     => [
+                    'flags' => $evidence['flags'],
+                    'score' => $evidence['normalized']['face_match_score'],
+                ],
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'code'    => 'FACE_EVIDENCE_REJECTED',
+                'message' => $evidence['reject_reason'],
+            ], 422);
+        }
+
         $absenHariIni = Attendance::where('employee_id', $employee->id)
             ->whereDate('waktu_absen', $waktuSekarang->toDateString())
             ->first();
 
-        // Foto: nama acak, disk privat (storage/app/private, tidak bisa diakses lewat URL publik).
-        $fotoPath = $request->file('foto')->store('absensi', 'local');
-
-        if (! $absenHariIni) {
-            return $this->absenMasuk($employee, $waktuSekarang, $lat, $lon, $jarak, $fotoPath, $setting);
-        }
-
-        if ($absenHariIni->waktu_pulang) {
+        // Ditaruh sebelum penyimpanan foto: submit ketiga selalu ditolak, jadi
+        // menyimpan fotonya hanya menghasilkan berkas yang tidak dirujuk.
+        if ($absenHariIni && $absenHariIni->waktu_pulang) {
             return response()->json([
                 'success' => false,
                 'message' => 'Anda sudah menyelesaikan absensi hari ini (masuk & pulang).',
             ], 409);
         }
 
-        return $this->absenPulang($absenHariIni, $waktuSekarang, $lat, $lon, $jarak, $fotoPath);
+        // Foto: nama acak, disk privat (storage/app/private, tidak bisa diakses lewat URL publik).
+        $fotoPath = $request->file('foto')->store('absensi', 'local');
+
+        if (! $absenHariIni) {
+            return $this->absenMasuk($employee, $waktuSekarang, $lat, $lon, $jarak, $fotoPath, $setting, $evidence);
+        }
+
+        return $this->absenPulang($absenHariIni, $waktuSekarang, $lat, $lon, $jarak, $fotoPath, $evidence);
     }
 
     private function absenMasuk(
@@ -119,11 +185,12 @@ class AttendanceController extends Controller
         float $jarak,
         string $fotoPath,
         Setting $setting,
+        array $evidence,
     ): JsonResponse {
         $jamMasuk = Carbon::parse($setting->jam_masuk, 'Asia/Jakarta');
         $status = $waktuSekarang->gt($jamMasuk) ? 'terlambat' : 'hadir';
 
-        Attendance::create([
+        $absen = Attendance::create([
             'employee_id' => $employee->id,
             'waktu_absen' => $waktuSekarang,
             'status'      => $status,
@@ -132,10 +199,16 @@ class AttendanceController extends Controller
             'foto_bukti'  => $fotoPath,
         ]);
 
+        $this->simpanBukti($absen, 'masuk', $evidence);
+
         AuditLog::record('attendance.created', [
             'employee_id' => $employee->id,
             'severity'    => 'info',
-            'context'     => ['status' => $status, 'jarak_meter' => round($jarak)],
+            'context'     => [
+                'status'      => $status,
+                'jarak_meter' => round($jarak),
+                'face_score'  => $evidence['normalized']['face_match_score'],
+            ],
         ]);
 
         return response()->json([
@@ -157,6 +230,7 @@ class AttendanceController extends Controller
         float $lon,
         float $jarak,
         string $fotoPath,
+        array $evidence,
     ): JsonResponse {
         $absenHariIni->update([
             'waktu_pulang'     => $waktuSekarang,
@@ -164,6 +238,8 @@ class AttendanceController extends Controller
             'latitude_pulang'  => $lat,
             'longitude_pulang' => $lon,
         ]);
+
+        $this->simpanBukti($absenHariIni, 'pulang', $evidence);
 
         $menitKerja = (int) round($absenHariIni->waktu_absen->diffInMinutes($waktuSekarang));
         $jamKerja = intdiv($menitKerja, 60);
@@ -237,6 +313,49 @@ class AttendanceController extends Controller
         ]);
     }
 
+    /**
+     * Menyajikan foto absensi milik PEMILIK TOKEN sendiri.
+     *
+     * Foto absensi disimpan di disk privat (storage/app/private), sehingga
+     * tidak bisa ditautkan langsung lewat /storage seperti dulu. Tanpa endpoint
+     * ini, layar riwayat di aplikasi selalu gagal memuat foto.
+     *
+     * Kepemilikan diperiksa dengan menyaring berdasarkan employee_id dari
+     * token -- bukan hanya membaca id di URL. Kalau tidak, siapa pun yang
+     * sudah login bisa menghitung id absensi orang lain dan mengunduh foto
+     * wajahnya (IDOR). Absensi milik orang lain sengaja dijawab 404, bukan
+     * 403: 403 mengonfirmasi bahwa id-nya ada.
+     */
+    public function photo(int $id, string $type): JsonResponse|StreamedResponse
+    {
+        $employee = request()->user();
+
+        if (! in_array($type, ['masuk', 'pulang'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Jenis foto tidak dikenal.',
+            ], 404);
+        }
+
+        $absen = Attendance::where('id', $id)
+            ->where('employee_id', $employee->id)
+            ->first();
+
+        // Satu baris absensi memuat dua event; fotonya di kolom berbeda.
+        $path = $absen?->{$type === 'pulang' ? 'foto_pulang' : 'foto_bukti'};
+
+        if (! $path || ! Storage::disk('local')->exists($path)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Foto absensi tidak ditemukan.',
+            ], 404);
+        }
+
+        return Storage::disk('local')->response($path, null, [
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+
     public function history(): JsonResponse
     {
         $employee = request()->user();
@@ -244,7 +363,20 @@ class AttendanceController extends Controller
         $riwayat = Attendance::where('employee_id', $employee->id)
             ->orderByDesc('waktu_absen')
             ->limit(30)
-            ->get();
+            ->get()
+            ->map(function (Attendance $absen) {
+                // URL siap pakai, bukan path penyimpanan mentah. Selain karena
+                // klien tidak bisa lagi menebak URL /storage (disknya privat),
+                // path internal server memang tidak perlu diketahui aplikasi.
+                return $absen->toArray() + [
+                    'foto_masuk_url' => $absen->foto_bukti
+                        ? url("/api/attendances/{$absen->id}/photo/masuk")
+                        : null,
+                    'foto_pulang_url' => $absen->foto_pulang
+                        ? url("/api/attendances/{$absen->id}/photo/pulang")
+                        : null,
+                ];
+            });
 
         return response()->json(['success' => true, 'data' => $riwayat], 200);
     }

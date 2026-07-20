@@ -56,6 +56,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attendances/today', [AttendanceController::class, 'today'])
         ->middleware('ability:attendance:read');
 
+    // Foto absensi milik sendiri. Didaftarkan sebelum /attendances/{nip}
+    // dengan alasan yang sama: dua segmen setelahnya membuatnya tidak
+    // bentrok, tetapi urutannya dijaga agar tetap jelas.
+    Route::get('/attendances/{id}/photo/{type}', [AttendanceController::class, 'photo'])
+        ->whereNumber('id')
+        ->middleware('ability:attendance:read');
+
     Route::get('/attendances/{nip}', [AttendanceController::class, 'history'])
         ->middleware('ability:attendance:read');
     Route::get('/history/{nip}', [AttendanceController::class, 'history'])

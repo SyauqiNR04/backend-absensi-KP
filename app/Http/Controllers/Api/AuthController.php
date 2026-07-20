@@ -142,7 +142,11 @@ class AuthController extends Controller
                     'nip'          => $employee->nip,
                     'nama_lengkap' => $employee->nama_lengkap,
                     'jabatan'      => $employee->jabatan,
-                    'status_wajah' => (bool) $employee->face_embedding,
+                    // Sumbernya foto_referensi, bukan face_embedding: pencocokan
+                    // wajah kini dilakukan aplikasi terhadap foto yang diunggah
+                    // admin, sehingga face_embedding tidak pernah terisi dan
+                    // flag ini akan selamanya false.
+                    'status_wajah' => (bool) $employee->foto_referensi,
                 ],
             ],
         ], $status);

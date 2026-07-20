@@ -28,7 +28,9 @@ class LocationAnomalyDetectorTest extends TestCase
 
         Attendance::create([
             'employee_id' => $e->id, 'waktu_absen' => $t0,
+            // foto_bukti wajib sejak absensi dijamin selalu punya bukti foto.
             'status' => 'hadir', 'latitude' => -6.2088, 'longitude' => 106.8456, // Jakarta
+            'foto_bukti' => 'absensi/uji.jpg',
         ]);
 
         $detector = new LocationAnomalyDetector();
@@ -45,7 +47,9 @@ class LocationAnomalyDetectorTest extends TestCase
 
         Attendance::create([
             'employee_id' => $e->id, 'waktu_absen' => $t0,
+            // foto_bukti wajib sejak absensi dijamin selalu punya bukti foto.
             'status' => 'hadir', 'latitude' => -6.2088, 'longitude' => 106.8456,
+            'foto_bukti' => 'absensi/uji.jpg',
         ]);
 
         $detector = new LocationAnomalyDetector();

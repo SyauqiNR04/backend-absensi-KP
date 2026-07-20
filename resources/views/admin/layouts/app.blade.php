@@ -67,6 +67,18 @@
         <div style="color: {{ request()->is('admin/employees*') ? '#14422D' : '#414943' }}; font-size: 12px; font-weight: 600;">Manage Employees</div>
       </a>
 
+      {{-- Jumlah temuan ditampilkan di sini: bukti yang tidak pernah dibuka
+           sama saja dengan tidak dikumpulkan, jadi angkanya perlu terlihat
+           tanpa admin harus membuka halamannya lebih dulu. --}}
+      @php $jumlahDitandai = \App\Models\AttendanceEvidence::where('is_flagged', true)->count(); @endphp
+      <a href="/admin/verifikasi" class="btn-hover" style="padding: 12px 16px; border-radius: 12px; display: flex; align-items: center; gap: 16px; {{ request()->is('admin/verifikasi*') ? 'background: rgba(253, 199, 78, 0.15); border-left: 4px solid #F4BE47;' : '' }}">
+        <div style="width: 18px; height: 18px; background: {{ request()->is('admin/verifikasi*') ? '#14422D' : '#414943' }}; border-radius: 4px;"></div>
+        <div style="color: {{ request()->is('admin/verifikasi*') ? '#14422D' : '#414943' }}; font-size: 12px; font-weight: 600;">Verifikasi Wajah</div>
+        @if($jumlahDitandai > 0)
+          <div style="margin-left: auto; min-width: 20px; padding: 2px 7px; background: #BA1A1A; border-radius: 9999px; color: white; font-size: 11px; font-weight: 700; text-align: center;">{{ $jumlahDitandai }}</div>
+        @endif
+      </a>
+
       <a href="/admin/geofence" class="btn-hover" style="padding: 12px 16px; border-radius: 12px; display: flex; align-items: center; gap: 16px; {{ request()->is('admin/geofence') ? 'background: rgba(253, 199, 78, 0.15); border-left: 4px solid #F4BE47;' : '' }}">
         <div style="width: 18px; height: 18px; background: {{ request()->is('admin/geofence') ? '#14422D' : '#414943' }}; border-radius: 4px;"></div>
         <div style="color: {{ request()->is('admin/geofence') ? '#14422D' : '#414943' }}; font-size: 12px; font-weight: 600;">Geo-Fence Config</div>

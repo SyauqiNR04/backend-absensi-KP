@@ -13,6 +13,12 @@
     </div>
   </div>
 
+  @if(session('success'))
+    <div style="padding: 16px 20px; background: #E6F4EA; border-radius: 12px; border: 1px solid #CEEAD6; color: #137333; font-weight: 600;">
+        {{ session('success') }}
+    </div>
+  @endif
+
   @if ($errors->any())
     <div style="padding: 16px; background: #FFF0F0; border-radius: 12px; border: 1px solid #FFDAD6; color: #BA1A1A;">
         <strong style="display: block; margin-bottom: 8px;">Gagal memperbarui data:</strong>
@@ -23,7 +29,7 @@
   @endif
 
   <div style="max-width: 700px; background: white; border-radius: 32px; border: 1px solid rgba(192, 201, 193, 0.20); box-shadow: 0px 4px 12px rgba(45, 90, 67, 0.08); padding: 32px;">
-    <form action="/admin/employees/{{ $employee->id }}" method="POST" style="display: flex; flex-direction: column; gap: 24px;">
+    <form action="/admin/employees/{{ $employee->id }}" method="POST" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 24px;">
         @csrf
         @method('PUT')
         <div>
@@ -37,6 +43,43 @@
         <div>
             <label class="form-label">Jabatan</label>
             <input type="text" name="jabatan" value="{{ old('jabatan', $employee->jabatan) }}" class="input-premium" required>
+        </div>
+
+        <div style="border-top: 1px solid rgba(192, 201, 193, 0.30); padding-top: 24px; display: flex; flex-direction: column; gap: 16px;">
+            <div style="color: #14422D; font-size: 18px; font-weight: 700;">Foto Referensi Wajah</div>
+
+            @if ($employee->foto_referensi)
+                <div style="display: flex; gap: 20px; align-items: flex-start;">
+                    <img src="{{ route('admin.employees.photo', $employee->id) }}" alt="Foto referensi {{ $employee->nama_lengkap }}"
+                         style="width: 140px; height: 140px; object-fit: cover; border-radius: 16px; border: 1px solid #C0C9C1;">
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        <div style="color: #414943; font-size: 14px; line-height: 20px;">
+                            Foto ini yang dipakai aplikasi untuk mencocokkan wajah saat absen.
+                            Unggah berkas baru di bawah untuk menggantinya.
+                        </div>
+                        <button type="submit" form="hapus-foto" class="btn-hover"
+                                onclick="return confirm('Hapus foto referensi karyawan ini? Ia tidak akan bisa absen sampai foto baru diunggah.')"
+                                style="align-self: flex-start; padding: 8px 16px; background: #FFF0F0; border-radius: 8px; color: #BA1A1A; font-size: 14px; font-weight: 700; border: 1px solid #FFDAD6; cursor: pointer;">
+                            Hapus Foto
+                        </button>
+                    </div>
+                </div>
+            @else
+                <div style="padding: 16px; background: #FFF0F0; border-radius: 12px; border: 1px solid #FFDAD6; color: #BA1A1A; font-size: 14px; line-height: 20px;">
+                    <strong>Karyawan ini belum punya foto referensi</strong> sehingga belum bisa melakukan absensi.
+                    Unggah fotonya di bawah.
+                </div>
+            @endif
+
+            <div>
+                <label class="form-label">{{ $employee->foto_referensi ? 'Ganti Foto' : 'Unggah Foto' }}</label>
+                <input type="file" name="foto_referensi" accept="image/jpeg,image/png" class="input-premium">
+                <div style="color: #6B7280; font-size: 13px; margin-top: 6px;">
+                    JPG atau PNG, maksimal 4 MB, resolusi minimal 300&times;300 piksel.
+                    Wajah menghadap depan, pencahayaan merata, hanya satu orang dalam foto.
+                    Kosongkan bila tidak ingin mengubah.
+                </div>
+            </div>
         </div>
 
         <div style="border-top: 1px solid rgba(192, 201, 193, 0.30); padding-top: 24px; display: flex; flex-direction: column; gap: 24px;">
@@ -66,6 +109,15 @@
             <button type="submit" class="btn-hover" style="padding: 14px 32px; background: #2D5A43; border-radius: 12px; color: white; font-size: 16px; font-weight: 700; border: none;">Simpan Perubahan</button>
         </div>
     </form>
+
+    {{-- Terpisah dari form utama: HTML tidak mengizinkan form bersarang.
+         Tombolnya di atas terhubung ke sini lewat atribut form="hapus-foto". --}}
+    @if ($employee->foto_referensi)
+        <form id="hapus-foto" action="{{ route('admin.employees.photo.destroy', $employee->id) }}" method="POST" style="display: none;">
+            @csrf
+            @method('DELETE')
+        </form>
+    @endif
   </div>
 </div>
 @endsection

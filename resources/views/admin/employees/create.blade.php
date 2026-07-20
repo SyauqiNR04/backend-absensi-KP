@@ -9,7 +9,7 @@
     </a>
     <div style="display: flex; flex-direction: column; gap: 4px;">
         <div style="color: #14422D; font-size: 30px; font-weight: 700;">Tambah Karyawan Baru</div>
-        <div style="color: #414943; font-size: 16px;">Masukkan identitas dasar karyawan. Perekaman wajah dilakukan menyusul via aplikasi.</div>
+        <div style="color: #414943; font-size: 16px;">Masukkan identitas dasar dan foto referensi wajah karyawan.</div>
     </div>
   </div>
 
@@ -23,7 +23,7 @@
   @endif
 
   <div style="max-width: 700px; background: white; border-radius: 32px; border: 1px solid rgba(192, 201, 193, 0.20); box-shadow: 0px 4px 12px rgba(45, 90, 67, 0.08); padding: 32px;">
-    <form action="/admin/employees" method="POST" style="display: flex; flex-direction: column; gap: 24px;">
+    <form action="/admin/employees" method="POST" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 24px;">
         @csrf
         <div>
             <label class="form-label">Nomor Induk Pegawai (NIP)</label>
@@ -56,10 +56,25 @@
                 Minta karyawan segera menggantinya sendiri dari aplikasi setelah login pertama.
             </div>
         </div>
-        <div style="padding: 16px; background: #EFF4FF; border-radius: 12px; border: 1px solid #C0C9C1; display: flex; gap: 12px; align-items: flex-start;">
-            <div style="color: #2563EB; font-size: 20px;">ℹ️</div>
-            <div style="color: #0B1C30; font-size: 14px; line-height: 20px;">
-                <strong>Catatan Perekaman AI:</strong> Status wajah (*face recognition*) akan otomatis berubah menjadi <b>"Terdaftar"</b> setelah karyawan melakukan *login* pertama kali di aplikasi *mobile*.
+        <div style="border-top: 1px solid rgba(192, 201, 193, 0.30); padding-top: 24px; display: flex; flex-direction: column; gap: 16px;">
+            <div style="color: #14422D; font-size: 18px; font-weight: 700;">Foto Referensi Wajah</div>
+            <div>
+                <label class="form-label">Unggah Foto</label>
+                <input type="file" name="foto_referensi" accept="image/jpeg,image/png" class="input-premium">
+                <div style="color: #6B7280; font-size: 13px; margin-top: 6px;">
+                    JPG atau PNG, maksimal 4 MB, resolusi minimal 300&times;300 piksel.
+                    Boleh dikosongkan sekarang dan diunggah menyusul lewat tombol Edit.
+                </div>
+            </div>
+            <div style="padding: 16px; background: #EFF4FF; border-radius: 12px; border: 1px solid #C0C9C1; display: flex; gap: 12px; align-items: flex-start;">
+                <div style="color: #2563EB; font-size: 20px;">ℹ️</div>
+                <div style="color: #0B1C30; font-size: 14px; line-height: 20px;">
+                    Foto ini yang dibandingkan dengan wajah karyawan saat absen.
+                    Gunakan foto menghadap depan, wajah memenuhi sebagian besar bingkai, pencahayaan merata,
+                    tanpa masker atau kacamata hitam, dan <strong>hanya berisi satu orang</strong>.
+                    <br><br>
+                    <strong>Selama foto ini belum diisi, karyawan tidak akan bisa melakukan absensi.</strong>
+                </div>
             </div>
         </div>
         <div style="display: flex; justify-content: flex-end; gap: 16px; margin-top: 16px;">
